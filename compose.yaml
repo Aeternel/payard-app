@@ -1,0 +1,82 @@
+name: payyard
+
+x-backend: &backend
+  build:
+    context: ./backend
+    args:
+      INSTALL_DEV: "true"
+  env_file:
+    - ./backend/.env
+  volumes:
+    - ./backend:/app
+    - media_data:/app/media
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: payyard
+      POSTGRES_USER: payyard
+      POSTGRES_PASSWORD: payyard_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payyard -d payyard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: payyard
+      RABBITMQ_DEFAULT_PASS: payyard_dev_password
+      RABBITMQ_DEFAULT_VHOST: payyard
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    <<: *backend
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py seed_demo --no-input &&
+             python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8001:8000"
+
+  celery:
+    <<: *backend
+    command: celery -A config worker -l INFO --concurrency=2
+
+  celery-beat:
+    <<: *backend
+    command: celery -A config beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  media_data:

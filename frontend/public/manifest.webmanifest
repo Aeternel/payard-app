@@ -1,0 +1,10 @@
+{
+  "name": "PayYard Supervisor",
+  "short_name": "PayYard",
+  "start_url": "/app/attendance",
+  "display": "standalone",
+  "background_color": "#f4f0e7",
+  "theme_color": "#10281f",
+  "icons": []
+}
+
