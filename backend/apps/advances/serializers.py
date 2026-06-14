@@ -12,9 +12,36 @@ class AdvancePolicySerializer(serializers.ModelSerializer):
         exclude = ["company"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        minimum = attrs.get(
+            "minimum_amount",
+            getattr(self.instance, "minimum_amount", Decimal("0")),
+        )
+        maximum = attrs.get(
+            "maximum_amount",
+            getattr(self.instance, "maximum_amount", None),
+        )
+        roles = attrs.get(
+            "approver_roles",
+            getattr(self.instance, "approver_roles", []),
+        )
+        if maximum is not None and maximum < minimum:
+            raise serializers.ValidationError(
+                {"maximum_amount": "Maximum amount cannot be below the minimum amount."}
+            )
+        if not roles:
+            raise serializers.ValidationError(
+                {"approver_roles": "Select at least one approval role."}
+            )
+        return attrs
+
 
 class AdvanceRequestSerializer(serializers.ModelSerializer):
     worker_name = serializers.CharField(source="worker.full_name", read_only=True)
+    worker_code = serializers.CharField(source="worker.worker_code", read_only=True)
+    requested_by_name = serializers.CharField(source="requested_by.name", read_only=True)
+    approved_by_name = serializers.CharField(source="approved_by.name", read_only=True)
+    deduction_cycle_name = serializers.CharField(source="deduction_cycle.name", read_only=True)
     available_limit = serializers.SerializerMethodField()
 
     class Meta:
@@ -58,7 +85,12 @@ class AdvanceRequestSerializer(serializers.ModelSerializer):
 
 class AdvanceDecisionSerializer(serializers.Serializer):
     approve = serializers.BooleanField()
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, min_value=0)
+    amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        min_value=Decimal("0"),
+    )
     reason = serializers.CharField(required=False, allow_blank=True)
 
 

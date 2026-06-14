@@ -73,3 +73,27 @@ class IsWorkforceManager(BasePermission):
     def has_permission(self, request, view):
         membership = getattr(request, "membership", None)
         return bool(membership and membership.role in self.allowed_roles)
+
+
+class CanCreateDisputes(BasePermission):
+    allowed_roles = {"supervisor", "operations", "hr", "admin", "owner"}
+
+    def has_permission(self, request, view):
+        membership = getattr(request, "membership", None)
+        return bool(membership and membership.role in self.allowed_roles)
+
+
+class IsDisputeResolver(BasePermission):
+    allowed_roles = {"hr", "admin", "owner"}
+
+    def has_permission(self, request, view):
+        membership = getattr(request, "membership", None)
+        return bool(membership and membership.role in self.allowed_roles)
+
+
+class IsAdvanceDisburser(BasePermission):
+    allowed_roles = {"finance", "admin", "owner"}
+
+    def has_permission(self, request, view):
+        membership = getattr(request, "membership", None)
+        return bool(membership and membership.role in self.allowed_roles)

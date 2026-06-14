@@ -313,13 +313,15 @@ def payroll_readiness(cycle):
             company=cycle.company,
             date_reference__range=(cycle.period_start, cycle.period_end),
         )
-        .exclude(status=Dispute.Status.RESOLVED)
+        .exclude(status__in=[Dispute.Status.RESOLVED, Dispute.Status.REJECTED])
         .count(),
         "unreconciled_advances": AdvanceRequest.objects.filter(
             company=cycle.company,
             deduction_cycle=cycle,
             status=AdvanceRequest.Status.DISBURSED,
-        ).count(),
+        )
+        .exclude(worker__payroll_lines__cycle=cycle)
+        .count(),
         "workers_missing_payroll_details": active_workers.filter(
             models.Q(payroll_method="") | models.Q(bank_account_or_card="")
         ).count(),
@@ -429,6 +431,8 @@ def build_payroll_lines(cycle, actor):
 
 @transaction.atomic
 def lock_payroll(cycle, actor):
+    from apps.advances.models import AdvanceRequest
+
     cycle = PayrollCycle.objects.select_for_update().get(pk=cycle.pk)
     if cycle.status != PayrollCycle.Status.APPROVED:
         raise ValidationError("Finance approval is required before payroll lock.")
@@ -444,6 +448,17 @@ def lock_payroll(cycle, actor):
         company=cycle.company,
         work_date__range=(cycle.period_start, cycle.period_end),
     ).update(status=DailyWageLedger.Status.FINAL)
+    deducted_advances = list(
+        AdvanceRequest.objects.select_for_update().filter(
+            company=cycle.company,
+            deduction_cycle=cycle,
+            status=AdvanceRequest.Status.DISBURSED,
+        )
+    )
+    for advance in deducted_advances:
+        advance.status = AdvanceRequest.Status.DEDUCTED
+        advance.save(update_fields=["status", "updated_at"])
+        record_audit(instance=advance, action="advance_deducted", actor=actor)
     cycle.status = PayrollCycle.Status.LOCKED
     cycle.locked_by = actor
     cycle.locked_at = timezone.now()

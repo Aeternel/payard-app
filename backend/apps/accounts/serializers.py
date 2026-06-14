@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
@@ -71,7 +73,7 @@ class StaffOnboardingSerializer(serializers.Serializer):
     job_title = serializers.CharField(max_length=100, required=False, allow_blank=True)
     employment_start_date = serializers.DateField(required=False)
     basic_wage = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0, required=False
+        max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False
     )
     allowances = serializers.JSONField(default=list)
     payroll_method = serializers.CharField(max_length=40, required=False, allow_blank=True)
@@ -180,7 +182,11 @@ class StaffPayrollProfileSerializer(serializers.Serializer):
     department = serializers.CharField(max_length=100, required=False, allow_blank=True)
     job_title = serializers.CharField(max_length=100, required=False, allow_blank=True)
     employment_start_date = serializers.DateField()
-    basic_wage = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0.01)
+    basic_wage = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+    )
     allowances = serializers.JSONField(default=list)
     payroll_method = serializers.CharField(max_length=40, required=False, allow_blank=True)
     bank_routing_code = serializers.CharField(

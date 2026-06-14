@@ -23,6 +23,12 @@ class DisputeSerializer(serializers.ModelSerializer):
     evidence = DisputeEvidenceSerializer(many=True, read_only=True)
     comments = DisputeCommentSerializer(many=True, read_only=True)
     worker_name = serializers.CharField(source="worker.full_name", read_only=True)
+    worker_code = serializers.CharField(source="worker.worker_code", read_only=True)
+    assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
+    resolved_by_name = serializers.CharField(source="resolved_by.name", read_only=True)
+    payroll_cycle_name = serializers.CharField(
+        source="linked_payroll_line.cycle.name", read_only=True
+    )
 
     class Meta:
         model = Dispute
@@ -53,3 +59,7 @@ class DisputeSerializer(serializers.ModelSerializer):
 class ResolveDisputeSerializer(serializers.Serializer):
     resolution = serializers.CharField(min_length=3)
     adjustment_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+
+
+class RejectDisputeSerializer(serializers.Serializer):
+    reason = serializers.CharField(min_length=3)

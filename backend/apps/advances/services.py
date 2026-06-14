@@ -51,6 +51,33 @@ def create_advance_request(*, worker, amount, acknowledgement, actor=None, chann
         raise ValidationError("Salary advances are not enabled.")
     if not acknowledgement:
         raise ValidationError({"acknowledgement": "Deduction acknowledgement is required."})
+    today = timezone.localdate()
+    cycle = PayrollCycle.objects.filter(
+        company=worker.company,
+        period_start__lte=today,
+        period_end__gte=today,
+    ).order_by("-version").first()
+    period_start = cycle.period_start if cycle else today.replace(day=1)
+    period_end = cycle.period_end if cycle else today
+    active_request_count = AdvanceRequest.objects.filter(
+        company=worker.company,
+        worker=worker,
+        created_at__date__range=(period_start, period_end),
+    ).exclude(
+        status__in=[
+            AdvanceRequest.Status.REJECTED,
+            AdvanceRequest.Status.CANCELLED,
+        ]
+    ).count()
+    if active_request_count >= policy.max_requests_per_cycle:
+        raise ValidationError(
+            {
+                "amount": (
+                    f"Only {policy.max_requests_per_cycle} active advance request(s) "
+                    "are allowed in this payroll cycle."
+                )
+            }
+        )
     limit = available_advance_limit(worker)
     if amount < policy.minimum_amount or amount > limit:
         raise ValidationError(
@@ -79,8 +106,12 @@ def decide_advance(*, advance, actor, approve, amount=None, reason=""):
     membership = actor.memberships.get(company=advance.company)
     if membership.role not in policy.approver_roles:
         raise ValidationError("Your role cannot approve advances.")
+    if not approve and not reason.strip():
+        raise ValidationError({"reason": "A rejection reason is required."})
     approved_amount = Decimal(str(amount or advance.requested_amount))
     current_limit = available_advance_limit(advance.worker)
+    if approve and approved_amount <= 0:
+        raise ValidationError({"amount": "Approved amount must be greater than zero."})
     if approve and approved_amount > min(advance.requested_amount, current_limit):
         raise ValidationError({"amount": "Approved amount exceeds the current limit."})
     advance.status = AdvanceRequest.Status.APPROVED if approve else AdvanceRequest.Status.REJECTED
@@ -94,6 +125,21 @@ def decide_advance(*, advance, actor, approve, amount=None, reason=""):
 
 
 @transaction.atomic
+def cancel_advance(*, advance, actor):
+    advance = AdvanceRequest.objects.select_for_update().get(pk=advance.pk)
+    if advance.status != AdvanceRequest.Status.REQUESTED:
+        raise ValidationError("Only a pending advance request can be cancelled.")
+    membership = actor.memberships.get(company=advance.company)
+    if membership.role not in {"hr", "admin", "owner"} and advance.requested_by_id != actor.id:
+        raise ValidationError("You cannot cancel this advance request.")
+    advance.status = AdvanceRequest.Status.CANCELLED
+    advance.decision_reason = "Cancelled before approval."
+    advance.save(update_fields=["status", "decision_reason", "updated_at"])
+    record_audit(instance=advance, action="advance_cancelled", actor=actor)
+    return advance
+
+
+@transaction.atomic
 def mark_disbursed(*, advance, actor, reference, cycle):
     advance = AdvanceRequest.objects.select_for_update().get(pk=advance.pk)
     if advance.status != AdvanceRequest.Status.APPROVED:
@@ -101,6 +147,7 @@ def mark_disbursed(*, advance, actor, reference, cycle):
     if cycle.company_id != advance.company_id or cycle.status in {
         PayrollCycle.Status.LOCKED,
         PayrollCycle.Status.EXPORTED,
+        PayrollCycle.Status.PAID,
     }:
         raise ValidationError("Choose an unlocked payroll cycle from the same company.")
     advance.status = AdvanceRequest.Status.DISBURSED

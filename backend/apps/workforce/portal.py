@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from decimal import InvalidOperation
 
 from django.utils import timezone
 from rest_framework import status
@@ -67,9 +68,13 @@ class WorkerPortalAdvancesView(WorkerPortalBaseView):
         acknowledgement = request.data.get("acknowledgement", False)
         if amount is None:
             return Response({"detail": "Amount is required."}, status=400)
+        try:
+            parsed_amount = Decimal(str(amount))
+        except (InvalidOperation, TypeError, ValueError):
+            return Response({"detail": "Enter a valid amount."}, status=400)
         advance = create_advance_request(
             worker=request.worker,
-            amount=Decimal(str(amount)),
+            amount=parsed_amount,
             acknowledgement=acknowledgement,
             channel="portal",
         )
@@ -79,7 +84,14 @@ class WorkerPortalAdvancesView(WorkerPortalBaseView):
 class WorkerPortalDisputesView(WorkerPortalBaseView):
     def get(self, request):
         disputes = request.worker.disputes.order_by("-created_at")
-        return Response(DisputeSerializer(disputes, many=True).data)
+        data = DisputeSerializer(disputes, many=True).data
+        for dispute in data:
+            dispute["comments"] = [
+                comment
+                for comment in dispute["comments"]
+                if comment["is_worker_visible"]
+            ]
+        return Response(data)
 
     def post(self, request):
         serializer = DisputeSerializer(

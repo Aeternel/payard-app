@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from .models import (
@@ -55,7 +57,10 @@ class PayrollLineSerializer(serializers.ModelSerializer):
 
 class PayrollLineOverrideSerializer(serializers.Serializer):
     net_pay = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0, allow_null=True
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0"),
+        allow_null=True,
     )
     reason = serializers.CharField(min_length=5, max_length=1000, trim_whitespace=True)
 
