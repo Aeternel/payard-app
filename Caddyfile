@@ -1,0 +1,30 @@
+# PayYard reverse proxy.
+# Caddy terminates TLS (automatic Let's Encrypt certificates) and forwards
+# X-Forwarded-Proto, which Django reads via SECURE_PROXY_SSL_HEADER.
+#
+# DNS required (point all records at this server's public IP):
+#   A   shafafy.com        -> <server IP>
+#   A   www.shafafy.com    -> <server IP>
+#   A   api.shafafy.com    -> <server IP>
+
+{
+	# Address Let's Encrypt uses for expiry / problem notices.
+	email admin@shafafy.com
+}
+
+# Web app (Next.js).
+shafafy.com {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+# Canonical redirect so the site has one address.
+www.shafafy.com {
+	redir https://shafafy.com{uri} permanent
+}
+
+# API (Django REST Framework).
+api.shafafy.com {
+	encode zstd gzip
+	reverse_proxy backend:8000
+}

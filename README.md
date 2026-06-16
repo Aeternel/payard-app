@@ -149,6 +149,38 @@ For separate production hosting:
 Notification delivery uses a transactional outbox. Provider failures are
 recorded and retried by Celery without rolling back the business transaction.
 
+## Reverse Proxy (Caddy)
+
+A `caddy` service fronts the stack on `shafafy.com`, terminating TLS with
+automatic Let's Encrypt certificates and forwarding `X-Forwarded-Proto` so
+Django (`SECURE_PROXY_SSL_HEADER`) detects HTTPS.
+
+```text
+shafafy.com        -> frontend (Next.js, :3000)
+www.shafafy.com    -> redirect to https://shafafy.com
+api.shafafy.com    -> backend  (Django,  :8000)
+```
+
+Routing lives in `Caddyfile`. The web app is built from `frontend/Dockerfile`
+(Next.js standalone output) and reaches Django over the internal compose
+network, so internal traffic never leaves the host.
+
+To run the proxied stack:
+
+1. Point DNS `A` records for `shafafy.com`, `www.shafafy.com`, and
+   `api.shafafy.com` at the server's public IP.
+2. Open ports `80` and `443` (TCP and UDP) so Caddy can solve ACME challenges
+   and serve HTTP/3.
+3. Set the production values in `backend/.env` (see the commented block in
+   `backend/.env.example`): `ALLOWED_HOSTS=api.shafafy.com,backend`,
+   `CSRF_TRUSTED_ORIGINS`/`CORS_ALLOWED_ORIGINS` with the `https://shafafy.com`
+   origins, and `WORKER_PORTAL_URL=https://shafafy.com/worker`.
+4. Update the `email` in `Caddyfile` if you want certificate notices elsewhere.
+5. Start everything: `docker compose up --build -d`.
+
+Caddy stores issued certificates in the `caddy_data` volume, so they survive
+restarts and are reused across deploys.
+
 ## Production Checklist
 
 1. Obtain UAE legal review for WPS formatting, wage rules, retention, consent,

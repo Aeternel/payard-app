@@ -64,8 +64,37 @@ services:
       sh -c "python manage.py migrate &&
              python manage.py seed_demo --no-input &&
              python manage.py runserver 0.0.0.0:8000"
+    expose:
+      - "8000"
     ports:
       - "8001:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      # Server-only Django URL, reached over the internal compose network.
+      INTERNAL_API_URL: http://backend:8000/api/v1
+      NODE_ENV: production
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
 
   celery:
     <<: *backend
@@ -80,3 +109,5 @@ volumes:
   redis_data:
   rabbitmq_data:
   media_data:
+  caddy_data:
+  caddy_config:
