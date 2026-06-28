@@ -15,6 +15,7 @@ import {
   ReceiptText,
   UserCog,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,7 +31,7 @@ import type { Me } from "@/lib/types";
 type NavigationItem = {
   href: string;
   label: string;
-  Icon: typeof Gauge;
+  Icon: LucideIcon;
   visible?: (role: Me["role"]) => boolean;
 };
 
