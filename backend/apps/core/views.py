@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.cache import caches
 from django.db import connections
 from django.http import Http404
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework import status as http_status
@@ -76,26 +77,25 @@ class ReadinessView(APIView):
             return {"status": "error", "detail": str(exc)}
 
 
-class SchemaView(APIView):
+class SchemaView(SpectacularAPIView):
     authentication_classes = []
     permission_classes = []
 
     def dispatch(self, request, *args, **kwargs):
         if not settings.ENABLE_API_DOCS:
             raise Http404()
-        spectacular_view = self.spectacular_view_class.as_view()
-        return spectacular_view(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
 
-class DocsView(APIView):
+class DocsView(SpectacularSwaggerView):
     authentication_classes = []
     permission_classes = []
+    url_name = "schema"
 
     def dispatch(self, request, *args, **kwargs):
         if not settings.ENABLE_API_DOCS:
             raise Http404()
-        swagger_view = self.swagger_view_class.as_view(url_name="schema")
-        return swagger_view(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
 
 class AuditLogViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

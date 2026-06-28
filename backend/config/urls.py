@@ -2,7 +2,6 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -112,24 +111,8 @@ router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
     path("ready/", ReadinessView.as_view(), name="ready"),
-    path(
-        "api/schema/",
-        type(
-            "ConfiguredSchemaView",
-            (SchemaView,),
-            {"spectacular_view_class": SpectacularAPIView},
-        ).as_view(),
-        name="schema",
-    ),
-    path(
-        "api/docs/",
-        type(
-            "ConfiguredDocsView",
-            (DocsView,),
-            {"swagger_view_class": SpectacularSwaggerView},
-        ).as_view(),
-        name="swagger-ui",
-    ),
+    path("api/schema/", SchemaView.as_view(), name="schema"),
+    path("api/docs/", DocsView.as_view(), name="swagger-ui"),
     path("api/v1/auth/login/", LoginView.as_view(), name="login"),
     path("api/v1/auth/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("api/v1/auth/me/", MeView.as_view(), name="me"),
