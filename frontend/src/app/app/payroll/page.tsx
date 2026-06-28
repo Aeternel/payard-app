@@ -17,7 +17,8 @@ import {
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Badge, ErrorState, LoadingState } from "@/components/page-state";
-import { apiFetch, fetchAll } from "@/lib/api";
+import { apiFetch, apiUrl, fetchAll } from "@/lib/api";
+import { canApprovePayroll, canManagePayroll } from "@/lib/access";
 import type { Me } from "@/lib/types";
 
 type Cycle = {
@@ -49,15 +50,48 @@ type PayrollLine = {
   flags: string[];
 };
 
-const managerRoles = new Set(["hr", "admin", "owner"]);
 const operatorRoles = new Set(["hr", "payroll", "finance", "admin", "owner"]);
-const approverRoles = new Set(["finance", "admin", "owner"]);
+const reportFormats = ["html", "pdf", "excel"] as const;
+type ReportFormat = (typeof reportFormats)[number];
+
+type PayrollExport = {
+  id: string;
+  cycle: string;
+  export_type: string;
+  version: number;
+  status: string;
+  row_count: number;
+  error: string;
+  completed_at: string | null;
+  created_at: string;
+  download_url: string | null;
+};
 
 function money(value: string | null) {
   return Number(value ?? 0).toLocaleString("en-AE", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function reportLabel(format: ReportFormat) {
+  return format === "html" ? "HTML" : format === "pdf" ? "PDF" : "Excel";
+}
+
+function filenameFromDisposition(disposition: string | null, fallback: string) {
+  const match = disposition?.match(/filename="([^"]+)"/i);
+  return match?.[1] ?? fallback;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function LineEditor({
@@ -183,14 +217,16 @@ export default function PayrollPage() {
   const [lines, setLines] = useState<PayrollLine[]>([]);
   const [showCycleForm, setShowCycleForm] = useState(false);
   const [editingCycle, setEditingCycle] = useState(false);
+  const [exportsByType, setExportsByType] = useState<Record<string, PayrollExport>>({});
   const [busy, setBusy] = useState("");
+  const [downloading, setDownloading] = useState<ReportFormat | "">("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const selected = cycles?.find((cycle) => cycle.id === selectedId) ?? null;
-  const canManage = Boolean(me && managerRoles.has(me.role));
+  const canManage = Boolean(me && canManagePayroll(me.role));
   const canOperate = Boolean(me && operatorRoles.has(me.role));
-  const canApprove = Boolean(me && approverRoles.has(me.role));
+  const canApprove = Boolean(me && canApprovePayroll(me.role));
   const lineEditable = Boolean(selected && ["draft", "review"].includes(selected.status));
 
   const loadCycles = useCallback(async () => {
@@ -215,6 +251,33 @@ export default function PayrollPage() {
     );
   }, [selectedId]);
 
+  const loadExports = useCallback(async () => {
+    if (!selectedId || !canApprove) {
+      setExportsByType({});
+      return;
+    }
+    const items = await fetchAll<PayrollExport>(
+      `payroll-exports/?cycle=${selectedId}&page_size=20`,
+    );
+    setExportsByType(
+      items.reduce<Record<string, PayrollExport>>((grouped, item) => {
+        const current = grouped[item.export_type];
+        if (!current || item.version > current.version) {
+          grouped[item.export_type] = item;
+        }
+        return grouped;
+      }, {}),
+    );
+  }, [canApprove, selectedId]);
+
+  function rememberExport(item: PayrollExport) {
+    setExportsByType((current) => {
+      const existing = current[item.export_type];
+      if (existing && existing.version > item.version) return current;
+      return { ...current, [item.export_type]: item };
+    });
+  }
+
   useEffect(() => {
     Promise.all([
       apiFetch<Me>("auth/me/"),
@@ -224,7 +287,7 @@ export default function PayrollPage() {
         setMe(profile);
         setCycles(items);
         setSelectedId(items[0]?.id ?? "");
-        if (managerRoles.has(profile.role)) {
+        if (canManagePayroll(profile.role)) {
           return apiFetch<PayrollSetting>("payroll-settings/").then(setSettings);
         }
       })
@@ -234,13 +297,43 @@ export default function PayrollPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      setLines([]);
+      setExportsByType({});
+      return;
+    }
     fetchAll<PayrollLine>(`payroll-lines/?cycle=${selectedId}&page_size=250`)
       .then(setLines)
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "Unable to load payroll lines."),
       );
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || !canApprove) return;
+    void loadExports().catch((caught) =>
+      setError(caught instanceof Error ? caught.message : "Unable to load payroll exports."),
+    );
+  }, [canApprove, loadExports, selectedId]);
+
+  useEffect(() => {
+    if (!canApprove) return;
+    const pending = Object.values(exportsByType).filter((item) =>
+      ["pending", "processing"].includes(item.status),
+    );
+    if (!pending.length) return;
+    const timer = window.setTimeout(() => {
+      void Promise.all(
+        pending.map(async (item) => {
+          const refreshed = await apiFetch<PayrollExport>(`payroll-exports/${item.id}/`);
+          rememberExport(refreshed);
+        }),
+      ).catch((caught) =>
+        setError(caught instanceof Error ? caught.message : "Unable to refresh payroll exports."),
+      );
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [canApprove, exportsByType]);
 
   async function command(id: string, action: string) {
     setBusy(`${action}-${id}`);
