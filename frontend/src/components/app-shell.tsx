@@ -27,7 +27,14 @@ import {
 } from "@/lib/access";
 import type { Me } from "@/lib/types";
 
-const navigation = [
+type NavigationItem = {
+  href: string;
+  label: string;
+  Icon: typeof Gauge;
+  visible?: (role: Me["role"]) => boolean;
+};
+
+const navigation: NavigationItem[] = [
   { href: "/app", label: "Overview", Icon: Gauge },
   { href: "/app/workers", label: "Workers", Icon: Users },
   { href: "/app/sites", label: "Sites & roster", Icon: Building2 },
@@ -47,7 +54,7 @@ const navigation = [
   { href: "/app/advances", label: "Advances", Icon: HandCoins },
   { href: "/app/disputes", label: "Disputes", Icon: MessageSquareWarning },
   { href: "/app/compliance", label: "Compliance", Icon: FileWarning },
-] as const;
+];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -74,6 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ? { href: "/app/payroll", label: "Payroll queue", Icon: Banknote }
         : null
     : null;
+  const QuickLinkIcon = quickLink?.Icon;
 
   return (
     <div className="app-shell">
@@ -104,9 +112,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div style={{ display: "flex", alignItems: "center", gap: ".6rem", fontWeight: 600 }}><Menu size={19} /> Operations workspace</div>
           <div style={{ display: "flex", gap: ".65rem" }}>
             <button className="button secondary" aria-label="Notifications"><Bell size={17} /></button>
-            {quickLink && (
+            {quickLink && QuickLinkIcon && (
               <Link className="button" href={quickLink.href}>
-                <quickLink.Icon size={17} /> {quickLink.label}
+                <QuickLinkIcon size={17} /> {quickLink.label}
               </Link>
             )}
           </div>
