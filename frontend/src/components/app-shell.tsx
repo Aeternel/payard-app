@@ -20,18 +20,33 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import {
+  canAccessAttendance,
+  canManageTeam,
+  canViewPayroll,
+} from "@/lib/access";
 import type { Me } from "@/lib/types";
 
 const navigation = [
-  ["/app", "Overview", Gauge],
-  ["/app/workers", "Workers", Users],
-  ["/app/sites", "Sites & roster", Building2],
-  ["/app/attendance", "Attendance", ClipboardCheck],
-  ["/app/payroll", "Payroll", Banknote],
-  ["/app/my-payroll", "My payroll", ReceiptText],
-  ["/app/advances", "Advances", HandCoins],
-  ["/app/disputes", "Disputes", MessageSquareWarning],
-  ["/app/compliance", "Compliance", FileWarning],
+  { href: "/app", label: "Overview", Icon: Gauge },
+  { href: "/app/workers", label: "Workers", Icon: Users },
+  { href: "/app/sites", label: "Sites & roster", Icon: Building2 },
+  {
+    href: "/app/attendance",
+    label: "Attendance",
+    Icon: ClipboardCheck,
+    visible: canAccessAttendance,
+  },
+  {
+    href: "/app/payroll",
+    label: "Payroll",
+    Icon: Banknote,
+    visible: canViewPayroll,
+  },
+  { href: "/app/my-payroll", label: "My payroll", Icon: ReceiptText },
+  { href: "/app/advances", label: "Advances", Icon: HandCoins },
+  { href: "/app/disputes", label: "Disputes", Icon: MessageSquareWarning },
+  { href: "/app/compliance", label: "Compliance", Icon: FileWarning },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -49,16 +64,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.refresh();
   }
 
+  const navItems = me
+    ? navigation.filter((item) => !item.visible || item.visible(me.role))
+    : navigation;
+  const quickLink = me
+    ? canAccessAttendance(me.role)
+      ? { href: "/app/attendance", label: "Today's roster", Icon: CalendarDays }
+      : canViewPayroll(me.role)
+        ? { href: "/app/payroll", label: "Payroll queue", Icon: Banknote }
+        : null
+    : null;
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <Link href="/app" className="brand"><span className="brand-mark">P</span> PayYard</Link>
         <nav className="nav">
-          {navigation.map(([href, label, Icon]) => {
+          {navItems.map(({ href, label, Icon }) => {
             const active = href === "/app" ? pathname === href : pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? "active" : ""}><Icon size={18} />{label}</Link>;
           })}
-          {me && ["admin", "owner"].includes(me.role) && (
+          {me && canManageTeam(me.role) && (
             <Link
               href="/app/team"
               className={pathname.startsWith("/app/team") ? "active" : ""}
@@ -78,7 +104,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div style={{ display: "flex", alignItems: "center", gap: ".6rem", fontWeight: 600 }}><Menu size={19} /> Operations workspace</div>
           <div style={{ display: "flex", gap: ".65rem" }}>
             <button className="button secondary" aria-label="Notifications"><Bell size={17} /></button>
-            <Link className="button" href="/app/attendance"><CalendarDays size={17} /> Today&apos;s roster</Link>
+            {quickLink && (
+              <Link className="button" href={quickLink.href}>
+                <quickLink.Icon size={17} /> {quickLink.label}
+              </Link>
+            )}
           </div>
         </header>
         <div className="content">{children}</div>
