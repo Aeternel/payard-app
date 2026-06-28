@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.permissions import HasActiveCompany, RoleAtLeast
+from apps.core.scoping import apply_active_supervisor_site_scope
 from apps.core.services import record_audit
 from apps.core.viewsets import TenantModelViewSet
 
@@ -24,7 +25,7 @@ class SiteViewSet(TenantModelViewSet):
     search_fields = ["name", "client_name", "address"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(supervisor_links__supervisor=self.request.user).distinct()
+        return apply_active_supervisor_site_scope(queryset, request=self.request, site_lookup="id")
 
 
 class SiteSupervisorViewSet(TenantModelViewSet):
@@ -33,7 +34,10 @@ class SiteSupervisorViewSet(TenantModelViewSet):
     filterset_fields = ["site", "supervisor", "is_primary"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(supervisor=self.request.user)
+        queryset = queryset.filter(supervisor=self.request.user)
+        return apply_active_supervisor_site_scope(
+            queryset, request=self.request, site_lookup="site_id"
+        )
 
 
 class ShiftTemplateViewSet(TenantModelViewSet):
@@ -51,7 +55,9 @@ class RosterAssignmentViewSet(TenantModelViewSet):
     ordering_fields = ["date", "created_at"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(site__supervisor_links__supervisor=self.request.user).distinct()
+        return apply_active_supervisor_site_scope(
+            queryset, request=self.request, site_lookup="site_id"
+        )
 
     def perform_create(self, serializer):
         instance = serializer.save(company=self.request.company, approved_by=self.request.user)
@@ -66,8 +72,10 @@ class WorkerTransferViewSet(TenantModelViewSet):
     filterset_fields = ["worker", "status", "to_site"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(
-            from_assignment__site__supervisor_links__supervisor=self.request.user
+        return apply_active_supervisor_site_scope(
+            queryset,
+            request=self.request,
+            site_lookup="from_assignment__site_id",
         )
 
     def perform_create(self, serializer):

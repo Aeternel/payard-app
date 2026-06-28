@@ -3,7 +3,9 @@ from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.attendance.models import AttendanceRecord
 from apps.core.permissions import HasActiveCompany, RoleAtLeast
+from apps.core.scoping import active_supervisor_site_ids
 from apps.core.services import record_audit
 
 from .models import ComplianceAlert
@@ -22,7 +24,14 @@ class ComplianceAlertViewSet(
     def get_queryset(self):
         queryset = ComplianceAlert.objects.filter(company=self.request.company)
         if self.request.membership.role == "supervisor":
-            queryset = queryset.filter(entity_type__in=["attendance.attendancerecord"])
+            attendance_ids = AttendanceRecord.objects.filter(
+                company=self.request.company,
+                site_id__in=active_supervisor_site_ids(self.request),
+            ).values("id")
+            queryset = queryset.filter(
+                entity_type="attendance.attendancerecord",
+                entity_id__in=attendance_ids,
+            )
         return queryset
 
     @action(detail=False, methods=["post"])

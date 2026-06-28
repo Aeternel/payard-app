@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from apps.attendance.models import AttendanceException, AttendanceRecord
 from apps.attendance.services import check_in, check_out, decide_exception
@@ -33,6 +34,26 @@ def test_check_in_is_idempotent(company, supervisor, roster):
     assert created is True
     assert duplicate_created is False
     assert first.id == second.id
+
+
+@pytest.mark.django_db
+def test_check_in_rejects_expired_supervisor_site_assignment(company, supervisor, roster):
+    link = roster.site.supervisor_links.get(supervisor=supervisor)
+    link.active_until = timezone.localdate() - timedelta(days=1)
+    link.save(update_fields=["active_until"])
+
+    captured = timezone.now() - timedelta(minutes=1)
+
+    with pytest.raises(ValidationError, match="Supervisor is not assigned to this site."):
+        check_in(
+            company=company,
+            actor=supervisor,
+            roster_id=roster.id,
+            captured_at=captured,
+            verification_method=AttendanceRecord.VerificationMethod.ID,
+            device_id="expired-link",
+            idempotency_key="expired-link-request",
+        )
 
 
 @pytest.mark.django_db

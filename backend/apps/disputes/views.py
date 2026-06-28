@@ -11,6 +11,7 @@ from apps.core.permissions import (
     HasActiveCompany,
     IsDisputeResolver,
 )
+from apps.core.scoping import apply_active_supervisor_worker_scope, supervisor_has_worker_access
 from apps.core.services import record_audit
 from apps.core.viewsets import TenantModelViewSet
 from apps.payroll.models import PayrollAdjustment
@@ -40,7 +41,9 @@ class DisputeViewSet(TenantModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(worker__supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup="worker"
+        )
 
     def get_permissions(self):
         if self.action == "create":
@@ -49,10 +52,7 @@ class DisputeViewSet(TenantModelViewSet):
 
     def perform_create(self, serializer):
         worker = serializer.validated_data["worker"]
-        if (
-            self.request.membership.role == "supervisor"
-            and worker.supervisor_id != self.request.user.id
-        ):
+        if not supervisor_has_worker_access(self.request, worker):
             raise PermissionDenied("Supervisors can only open disputes for their workers.")
         assigned_to = worker.supervisor
         initial_status = (
@@ -157,16 +157,15 @@ class DisputeEvidenceViewSet(TenantModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(dispute__worker__supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup="dispute__worker"
+        )
 
     def perform_create(self, serializer):
         dispute = serializer.validated_data["dispute"]
         if dispute.company_id != self.request.company.id:
             raise PermissionDenied("Cross-company reference denied.")
-        if (
-            self.request.membership.role == "supervisor"
-            and dispute.worker.supervisor_id != self.request.user.id
-        ):
+        if not supervisor_has_worker_access(self.request, dispute.worker):
             raise PermissionDenied("Supervisors can only add evidence to their workers' cases.")
         instance = serializer.save(company=self.request.company, uploaded_by=self.request.user)
         record_audit(instance=instance, action="dispute_evidence_added", actor=self.request.user)
@@ -179,16 +178,15 @@ class DisputeCommentViewSet(TenantModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(dispute__worker__supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup="dispute__worker"
+        )
 
     def perform_create(self, serializer):
         dispute = serializer.validated_data["dispute"]
         if dispute.company_id != self.request.company.id:
             raise PermissionDenied("Cross-company reference denied.")
-        if (
-            self.request.membership.role == "supervisor"
-            and dispute.worker.supervisor_id != self.request.user.id
-        ):
+        if not supervisor_has_worker_access(self.request, dispute.worker):
             raise PermissionDenied("Supervisors can only comment on their workers' cases.")
         instance = serializer.save(company=self.request.company, author=self.request.user)
         record_audit(instance=instance, action="dispute_commented", actor=self.request.user)

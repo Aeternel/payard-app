@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from apps.accounts.models import Membership
 from apps.core.permissions import HasActiveCompany, IsWorkforceManager, RoleAtLeast
+from apps.core.scoping import apply_active_supervisor_worker_scope
 from apps.core.services import record_audit
 from apps.core.viewsets import TenantModelViewSet
 
@@ -33,7 +34,9 @@ class WorkerViewSet(TenantModelViewSet):
         return super().get_permissions()
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup=""
+        )
 
     @action(detail=False, methods=["get"], url_path="creation-options")
     def creation_options(self, request):
@@ -115,7 +118,9 @@ class WorkerDocumentViewSet(TenantModelViewSet):
     ordering_fields = ["expiry_date", "created_at"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(worker__supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup="worker"
+        )
 
     @action(detail=True, methods=["post"], permission_classes=[HasActiveCompany, RoleAtLeast])
     def verify(self, request, pk=None):
@@ -135,7 +140,9 @@ class ConsentRecordViewSet(TenantModelViewSet):
     filterset_fields = ["worker", "consent_type", "status"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(worker__supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup="worker"
+        )
 
     def perform_create(self, serializer):
         instance = serializer.save(company=self.request.company, captured_by=self.request.user)

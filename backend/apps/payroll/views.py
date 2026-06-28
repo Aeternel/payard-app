@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
@@ -14,6 +14,7 @@ from apps.core.permissions import (
     IsPayrollManager,
     IsPayrollOperator,
 )
+from apps.core.scoping import apply_active_supervisor_site_scope
 from apps.core.services import model_snapshot, record_audit
 from apps.core.viewsets import TenantModelViewSet
 
@@ -72,9 +73,9 @@ class DailyWageLedgerViewSet(
         queryset = DailyWageLedger.objects.filter(company=self.request.company).select_related(
             "worker", "attendance"
         )
-        if self.request.membership.role == "supervisor":
-            queryset = queryset.filter(worker__supervisor=self.request.user)
-        return queryset
+        return apply_active_supervisor_site_scope(
+            queryset, request=self.request, site_lookup="attendance__site_id"
+        )
 
 
 class PayrollCycleViewSet(TenantModelViewSet):
@@ -87,6 +88,7 @@ class PayrollCycleViewSet(TenantModelViewSet):
         return (
             super()
             .get_queryset()
+            .annotate(line_count=Count("lines"))
             .annotate(total_net_pay=Sum("lines__net_pay"))
             .select_related("submitted_by", "approved_by", "locked_by")
         )

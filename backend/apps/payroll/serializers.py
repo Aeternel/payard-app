@@ -66,7 +66,7 @@ class PayrollLineOverrideSerializer(serializers.Serializer):
 
 
 class PayrollCycleSerializer(serializers.ModelSerializer):
-    line_count = serializers.IntegerField(source="lines.count", read_only=True)
+    line_count = serializers.IntegerField(read_only=True)
     total_net_pay = serializers.DecimalField(max_digits=16, decimal_places=2, read_only=True)
 
     class Meta:

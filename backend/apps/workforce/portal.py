@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 from decimal import InvalidOperation
 
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import BasePermission
@@ -11,7 +12,7 @@ from rest_framework.views import APIView
 from apps.advances.serializers import AdvanceRequestSerializer
 from apps.advances.services import available_advance_limit, create_advance_request
 from apps.attendance.serializers import AttendanceRecordSerializer
-from apps.disputes.models import Dispute
+from apps.disputes.models import Dispute, DisputeComment
 from apps.disputes.serializers import DisputeSerializer
 from apps.notifications.authentication import WorkerPortalAuthentication
 from apps.payroll.serializers import DailyWageLedgerSerializer, PayrollLineSerializer
@@ -54,13 +55,15 @@ class WorkerPortalPayslipsView(WorkerPortalBaseView):
     def get(self, request):
         lines = request.worker.payroll_lines.filter(
             cycle__status__in=["locked", "exported", "paid"]
-        ).select_related("worker", "cycle")
+        ).select_related("worker", "cycle").order_by("-cycle__period_end")[:24]
         return Response(PayrollLineSerializer(lines, many=True).data)
 
 
 class WorkerPortalAdvancesView(WorkerPortalBaseView):
     def get(self, request):
-        advances = request.worker.advance_requests.order_by("-created_at")
+        advances = request.worker.advance_requests.select_related(
+            "requested_by", "approved_by", "deduction_cycle"
+        ).order_by("-created_at")[:50]
         return Response(AdvanceRequestSerializer(advances, many=True).data)
 
     def post(self, request):
@@ -83,15 +86,26 @@ class WorkerPortalAdvancesView(WorkerPortalBaseView):
 
 class WorkerPortalDisputesView(WorkerPortalBaseView):
     def get(self, request):
-        disputes = request.worker.disputes.order_by("-created_at")
-        data = DisputeSerializer(disputes, many=True).data
-        for dispute in data:
-            dispute["comments"] = [
-                comment
-                for comment in dispute["comments"]
-                if comment["is_worker_visible"]
-            ]
-        return Response(data)
+        disputes = (
+            request.worker.disputes.select_related(
+                "assigned_to",
+                "resolved_by",
+                "linked_attendance",
+                "linked_payroll_line__cycle",
+                "linked_adjustment",
+            )
+            .prefetch_related(
+                "evidence",
+                Prefetch(
+                    "comments",
+                    queryset=DisputeComment.objects.filter(is_worker_visible=True).select_related(
+                        "author"
+                    ),
+                ),
+            )
+            .order_by("-created_at")[:50]
+        )
+        return Response(DisputeSerializer(disputes, many=True).data)
 
     def post(self, request):
         serializer = DisputeSerializer(

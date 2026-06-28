@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.permissions import HasActiveCompany
+from apps.core.scoping import apply_active_supervisor_site_scope
 from apps.core.services import record_audit
 from apps.core.viewsets import TenantModelViewSet
 
@@ -38,11 +39,9 @@ class AttendanceRecordViewSet(
         queryset = AttendanceRecord.objects.filter(company=self.request.company).select_related(
             "worker", "site", "shift", "roster_assignment"
         )
-        if self.request.membership.role == "supervisor":
-            queryset = queryset.filter(
-                site__supervisor_links__supervisor=self.request.user
-            ).distinct()
-        return queryset
+        return apply_active_supervisor_site_scope(
+            queryset, request=self.request, site_lookup="site_id"
+        )
 
     @action(detail=False, methods=["post"], serializer_class=CheckInSerializer)
     def check_in(self, request):
@@ -106,11 +105,9 @@ class AttendanceExceptionViewSet(
         queryset = AttendanceException.objects.filter(company=self.request.company).select_related(
             "attendance", "attendance__worker", "decided_by"
         )
-        if self.request.membership.role == "supervisor":
-            queryset = queryset.filter(
-                attendance__site__supervisor_links__supervisor=self.request.user
-            ).distinct()
-        return queryset
+        return apply_active_supervisor_site_scope(
+            queryset, request=self.request, site_lookup="attendance__site_id"
+        )
 
     @action(
         detail=True,
@@ -132,7 +129,9 @@ class OvertimeRequestViewSet(TenantModelViewSet):
     filterset_fields = ["attendance", "status", "requested_by"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(attendance__site__supervisor_links__supervisor=self.request.user)
+        return apply_active_supervisor_site_scope(
+            queryset, request=self.request, site_lookup="attendance__site_id"
+        )
 
     def perform_create(self, serializer):
         instance = serializer.save(company=self.request.company, requested_by=self.request.user)
