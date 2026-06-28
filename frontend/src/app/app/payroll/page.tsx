@@ -358,6 +358,57 @@ export default function PayrollPage() {
     }
   }
 
+  async function runReport(format: ReportFormat) {
+    if (!selected) return;
+    setDownloading(format);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(
+        apiUrl(`payroll-cycles/${selected.id}/report-${format}/`),
+        {
+          credentials: "same-origin",
+          cache: "no-store",
+        },
+      );
+      const contentType = response.headers.get("content-type") ?? "";
+      if (response.status === 202) {
+        const queued = await response.json() as PayrollExport;
+        rememberExport(queued);
+        setNotice(
+          canApprove
+            ? `${reportLabel(format)} report queued. This page will refresh its status automatically.`
+            : `${reportLabel(format)} report queued. Finance, admin, or owner users can download it once it is ready.`,
+        );
+        return;
+      }
+      if (!response.ok) {
+        if (contentType.includes("application/json")) {
+          const payload = await response.json() as { detail?: string; error?: { detail?: string } };
+          throw new Error(payload.error?.detail ?? payload.detail ?? "Unable to generate report.");
+        }
+        throw new Error((await response.text()) || "Unable to generate report.");
+      }
+      const blob = await response.blob();
+      const fallbackName = `${selected.name.replace(/\s+/g, "-").toLowerCase()}.${format === "excel" ? "xlsx" : format}`;
+      if (format === "html") {
+        const previewUrl = URL.createObjectURL(blob);
+        window.open(previewUrl, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
+      } else {
+        downloadBlob(
+          blob,
+          filenameFromDisposition(response.headers.get("content-disposition"), fallbackName),
+        );
+      }
+      setNotice(`${reportLabel(format)} report generated.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to generate report.");
+    } finally {
+      setDownloading("");
+    }
+  }
+
   async function savePolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!settings) return;
