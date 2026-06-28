@@ -6,12 +6,22 @@ from django.conf import settings
 from django.db import models
 
 
+def _derived_key():
+    return base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+
+
 def _fernet():
     configured = settings.FIELD_ENCRYPTION_KEY
     if configured:
-        key = configured.encode()
-    else:
-        key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+        try:
+            return Fernet(configured.encode())
+        except ValueError:
+            if settings.ENVIRONMENT in {"development", "local", "test"}:
+                return Fernet(_derived_key())
+            raise ValueError(
+                "FIELD_ENCRYPTION_KEY must be a valid Fernet key: 32 url-safe base64-encoded bytes."
+            )
+    key = _derived_key()
     return Fernet(key)
 
 

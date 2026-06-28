@@ -1,0 +1,123 @@
+name: payyard-dev
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: payyard
+      POSTGRES_USER: payyard
+      POSTGRES_PASSWORD: payyard_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payyard -d payyard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data    # Crucial for saving SSL certificates
+      - caddy_config:/config
+    depends_on:
+      - web
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: payyard
+      RABBITMQ_DEFAULT_PASS: payyard_dev_password
+      RABBITMQ_DEFAULT_VHOST: payyard
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    env_file:
+      - ./.env
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py seed_demo --no-input &&
+             python manage.py runserver 0.0.0.0:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - media_data:/app/media
+
+
+  celery:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    env_file:
+      - ./.env
+    command: celery -A config worker -l INFO --concurrency=2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - media_data:/app/media
+
+  celery-beat:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    env_file:
+      - ./.env
+    command: celery -A config beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - media_data:/app/media
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  media_data:
+  caddy_data:      # <-- Add this
+  caddy_config:    # <-- Add this
