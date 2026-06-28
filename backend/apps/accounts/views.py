@@ -70,6 +70,7 @@ class MyPayrollView(generics.GenericAPIView):
             )
             .select_related("worker", "cycle")
             .order_by("-cycle__period_end")
+            [:24]
         )
         return Response(
             {

@@ -8,6 +8,7 @@ from apps.core.permissions import (
     IsFinanceApprover,
     IsWorkforceManager,
 )
+from apps.core.scoping import apply_active_supervisor_worker_scope
 from apps.core.viewsets import TenantModelViewSet
 from apps.payroll.models import PayrollCycle
 from apps.workforce.models import Worker
@@ -56,7 +57,9 @@ class AdvanceRequestViewSet(TenantModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def scope_supervisor_queryset(self, queryset):
-        return queryset.filter(worker__supervisor=self.request.user)
+        return apply_active_supervisor_worker_scope(
+            queryset, request=self.request, worker_lookup="worker"
+        )
 
     def get_permissions(self):
         if self.action == "create":

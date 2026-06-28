@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -28,6 +29,14 @@ def _validate_capture_time(captured_at):
         raise ValidationError({"captured_at": "Capture time cannot be in the future."})
     if captured_at < now - timedelta(days=7):
         raise ValidationError({"captured_at": "Offline records older than seven days need review."})
+
+
+def _supervisor_has_active_site_access(*, roster, actor):
+    today = timezone.localdate()
+    return roster.site.supervisor_links.filter(
+        supervisor=actor,
+        active_from__lte=today,
+    ).filter(Q(active_until__isnull=True) | Q(active_until__gte=today)).exists()
 
 
 @transaction.atomic
@@ -60,7 +69,7 @@ def check_in(
         raise ValidationError({"roster_assignment": "Active roster assignment not found."})
     if (
         actor.memberships.get(company=company).role == "supervisor"
-        and not roster.site.supervisor_links.filter(supervisor=actor).exists()
+        and not _supervisor_has_active_site_access(roster=roster, actor=actor)
     ):
         raise ValidationError("Supervisor is not assigned to this site.")
     if hasattr(roster, "attendance"):
