@@ -4,7 +4,7 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.core.permissions import HasActiveCompany
+from apps.core.permissions import CanManageAttendance, HasActiveCompany
 from apps.core.scoping import apply_active_supervisor_site_scope
 from apps.core.services import record_audit
 from apps.core.viewsets import TenantModelViewSet
@@ -28,7 +28,7 @@ class AttendanceRecordViewSet(
 ):
     queryset = AttendanceRecord.objects.none()
     serializer_class = AttendanceRecordSerializer
-    permission_classes = [HasActiveCompany]
+    permission_classes = [HasActiveCompany, CanManageAttendance]
     filterset_fields = ["worker", "site", "work_date", "status", "verification_method"]
     search_fields = ["worker__worker_code", "worker__full_name"]
     ordering_fields = ["work_date", "check_in_at", "created_at"]
@@ -96,7 +96,7 @@ class AttendanceExceptionViewSet(
 ):
     queryset = AttendanceException.objects.none()
     serializer_class = AttendanceExceptionSerializer
-    permission_classes = [HasActiveCompany]
+    permission_classes = [HasActiveCompany, CanManageAttendance]
     filterset_fields = ["attendance", "exception_type", "status"]
 
     def get_queryset(self):
@@ -126,6 +126,7 @@ class AttendanceExceptionViewSet(
 class OvertimeRequestViewSet(TenantModelViewSet):
     queryset = OvertimeRequest.objects.select_related("attendance", "requested_by", "decided_by")
     serializer_class = OvertimeRequestSerializer
+    permission_classes = [HasActiveCompany, CanManageAttendance]
     filterset_fields = ["attendance", "status", "requested_by"]
 
     def scope_supervisor_queryset(self, queryset):

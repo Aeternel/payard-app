@@ -39,6 +39,8 @@ Django REST Framework modular monolith
 Payroll-impacting actions use service functions and database transactions.
 Attendance events and audit logs are append-only. Locked payroll data is not
 silently overwritten; corrections are represented by adjustment records.
+Large payroll artifacts are offloaded to Celery once a cycle exceeds the
+configured synchronous row threshold.
 
 ## Local Development
 
@@ -105,7 +107,10 @@ make seed
 
 - Every business row carries a company foreign key.
 - JWTs carry one active company and are checked against live membership.
-- Supervisors are additionally restricted to assigned sites and workers.
+- Supervisors are additionally restricted to currently active site assignments
+  and the workers attached to those active sites.
+- Operational APIs are separated from self-service APIs by role-based
+  permissions instead of relying only on tenant membership.
 - Sensitive identifiers and payroll account fields use Fernet field
   encryption. Set an independent `FIELD_ENCRYPTION_KEY` outside development.
 - Staff tokens are kept in HttpOnly cookies by the Next.js server layer.
@@ -146,6 +151,8 @@ Operational flags:
   intentionally expose OpenAPI docs.
 - `ENABLE_ADMIN` should be `false` in staging and production unless you
   intentionally rely on Django admin.
+- `PAYROLL_REPORT_SYNC_MAX_ROWS` caps how many payroll lines can be rendered
+  synchronously before the API queues a background artifact instead.
 
 For separate production hosting:
 
@@ -157,6 +164,14 @@ For separate production hosting:
 
 Notification delivery uses a transactional outbox. Provider failures are
 recorded and retried by Celery without rolling back the business transaction.
+
+Payroll report generation supports two modes:
+
+- Small cycles are streamed directly from `/api/v1/payroll-cycles/<id>/report-*`.
+- Large cycles automatically return `202 Accepted`, create a `PayrollExport`
+  artifact with `export_type` like `report_pdf`, and finish generation in
+  Celery. Clients should poll `/api/v1/payroll-exports/` and use the returned
+  `download_url` once the artifact reaches `ready`.
 
 ## Production Checklist
 
@@ -173,3 +188,5 @@ recorded and retried by Celery without rolling back the business transaction.
 7. Configure retention schedules and test deletion/anonymization procedures.
 8. Load-test bulk attendance, offline sync, payroll close, and export generation
    at expected site concurrency.
+9. Set a conservative `PAYROLL_REPORT_SYNC_MAX_ROWS` for your worker and memory
+   budget so large payroll reports are always processed asynchronously.

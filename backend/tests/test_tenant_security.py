@@ -150,3 +150,35 @@ def test_supervisor_only_sees_compliance_alerts_for_currently_supervised_sites(
     assert response.status_code == 200
     assert response.data["count"] == 1
     assert response.data["results"][0]["id"] == str(visible_alert.id)
+
+
+@pytest.mark.django_db
+def test_payroll_user_cannot_create_site(api_client, company):
+    payroll_user = User.objects.create_user(
+        phone="+971500009098", password="StrongTestPass!1", name="Payroll User"
+    )
+    Membership.objects.create(user=payroll_user, company=company, role=Membership.Role.PAYROLL)
+    token = RefreshToken.for_user(payroll_user)
+    token["company_id"] = str(company.id)
+    token["role"] = Membership.Role.PAYROLL
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.access_token}")
+
+    response = api_client.post("/api/v1/sites/", {"name": "Restricted Site"}, format="json")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_payroll_user_cannot_queue_compliance_scan(api_client, company):
+    payroll_user = User.objects.create_user(
+        phone="+971500009097", password="StrongTestPass!1", name="Payroll User"
+    )
+    Membership.objects.create(user=payroll_user, company=company, role=Membership.Role.PAYROLL)
+    token = RefreshToken.for_user(payroll_user)
+    token["company_id"] = str(company.id)
+    token["role"] = Membership.Role.PAYROLL
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.access_token}")
+
+    response = api_client.post("/api/v1/compliance-alerts/scan/", {}, format="json")
+
+    assert response.status_code == 403

@@ -17,6 +17,7 @@ from .serializers import ConsentRecordSerializer, WorkerDocumentSerializer, Work
 class WorkerViewSet(TenantModelViewSet):
     queryset = Worker.objects.select_related("default_site", "supervisor")
     serializer_class = WorkerSerializer
+    permission_classes = [HasActiveCompany, RoleAtLeast]
     filterset_fields = ["status", "wage_type", "default_site", "supervisor"]
     search_fields = ["worker_code", "full_name", "phone"]
     ordering_fields = ["worker_code", "full_name", "employment_start_date", "created_at"]
@@ -114,6 +115,7 @@ class WorkerViewSet(TenantModelViewSet):
 class WorkerDocumentViewSet(TenantModelViewSet):
     queryset = WorkerDocument.objects.select_related("worker")
     serializer_class = WorkerDocumentSerializer
+    permission_classes = [HasActiveCompany, RoleAtLeast]
     filterset_fields = ["worker", "document_type", "status"]
     ordering_fields = ["expiry_date", "created_at"]
 
@@ -136,6 +138,7 @@ class WorkerDocumentViewSet(TenantModelViewSet):
 class ConsentRecordViewSet(TenantModelViewSet):
     queryset = ConsentRecord.objects.select_related("worker", "captured_by")
     serializer_class = ConsentRecordSerializer
+    permission_classes = [HasActiveCompany, RoleAtLeast]
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["worker", "consent_type", "status"]
 

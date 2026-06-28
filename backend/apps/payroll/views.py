@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.http import HttpResponse
@@ -27,9 +28,7 @@ from .models import (
     WageRule,
 )
 from .reports import (
-    build_excel_report,
-    build_html_report,
-    build_pdf_report,
+    build_report_artifact,
     report_data,
 )
 from .serializers import (
@@ -47,7 +46,7 @@ from .services import (
     payroll_line_daily_breakdown,
     payroll_readiness,
 )
-from .tasks import generate_wps_export
+from .tasks import generate_payroll_report, generate_wps_export
 
 
 class WageRuleViewSet(TenantModelViewSet):
@@ -131,22 +130,15 @@ class PayrollCycleViewSet(TenantModelViewSet):
                 {"detail": "Build the payroll cycle before generating reports."},
                 status=status.HTTP_409_CONFLICT,
             )
-        report = report_data(cycle)
-        if report_format == "html":
-            content = build_html_report(report).encode()
-            filename = f"payyard-{cycle.period_start}-{cycle.period_end}.html"
-            content_type = "text/html; charset=utf-8"
-            disposition = "inline"
-        elif report_format == "pdf":
-            content, filename = build_pdf_report(report)
-            content_type = "application/pdf"
-            disposition = "attachment"
-        else:
-            content, filename = build_excel_report(report)
-            content_type = (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        line_count = cycle.lines.count()
+        if line_count > settings.PAYROLL_REPORT_SYNC_MAX_ROWS:
+            export = self._queue_report(cycle=cycle, request=request, report_format=report_format)
+            return Response(
+                PayrollExportSerializer(export, context={"request": request}).data,
+                status=status.HTTP_202_ACCEPTED,
             )
-            disposition = "attachment"
+        report = report_data(cycle)
+        content, filename, content_type, disposition = build_report_artifact(report, report_format)
         record_audit(
             instance=cycle,
             action="payroll_report_downloaded",
@@ -161,6 +153,25 @@ class PayrollCycleViewSet(TenantModelViewSet):
         response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
         response["X-Content-Type-Options"] = "nosniff"
         return response
+
+    def _queue_report(self, *, cycle, request, report_format):
+        export_type = f"report_{report_format}"
+        version = cycle.exports.filter(export_type=export_type).count() + 1
+        export = PayrollExport.objects.create(
+            company=request.company,
+            cycle=cycle,
+            export_type=export_type,
+            version=version,
+            requested_by=request.user,
+        )
+        transaction.on_commit(lambda: generate_payroll_report.delay(str(export.id)))
+        record_audit(
+            instance=export,
+            action="payroll_report_queued",
+            actor=request.user,
+            metadata={"format": report_format, "cycle_status": cycle.status},
+        )
+        return export
 
     @action(detail=True, methods=["get"], url_path="report-html")
     def report_html(self, request, pk=None):

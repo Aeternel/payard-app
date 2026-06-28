@@ -21,6 +21,7 @@ ENABLE_ADMIN = env.bool("ENABLE_ADMIN", default=ENVIRONMENT == "development")
 ENABLE_API_DOCS = env.bool(
     "ENABLE_API_DOCS", default=DEBUG or ENVIRONMENT == "development"
 )
+PAYROLL_REPORT_SYNC_MAX_ROWS = env.int("PAYROLL_REPORT_SYNC_MAX_ROWS", default=250)
 
 DJANGO_APPS = [
     "django.contrib.admin",

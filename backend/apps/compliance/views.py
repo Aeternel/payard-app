@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.attendance.models import AttendanceRecord
-from apps.core.permissions import HasActiveCompany, RoleAtLeast
+from apps.core.permissions import CanResolveCompliance, HasActiveCompany, RoleAtLeast
 from apps.core.scoping import active_supervisor_site_ids
 from apps.core.services import record_audit
 
@@ -34,12 +34,21 @@ class ComplianceAlertViewSet(
             )
         return queryset
 
-    @action(detail=False, methods=["post"])
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[HasActiveCompany, CanResolveCompliance],
+    )
     def scan(self, request):
         scan_compliance_alerts.delay(str(request.company.id))
         return Response({"detail": "Compliance scan queued."}, status=202)
 
-    @action(detail=True, methods=["post"], serializer_class=ResolveComplianceAlertSerializer)
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=ResolveComplianceAlertSerializer,
+        permission_classes=[HasActiveCompany, CanResolveCompliance],
+    )
     def resolve(self, request, pk=None):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

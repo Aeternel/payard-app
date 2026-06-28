@@ -1,8 +1,10 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
+from django.test import override_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import Membership, User
@@ -300,3 +302,21 @@ def test_report_requires_built_payroll_lines(api_client, company, hr, cycle):
     response = api_client.get(f"/api/v1/payroll-cycles/{cycle.id}/report-pdf/")
 
     assert response.status_code == 409
+
+
+@pytest.mark.django_db
+@override_settings(PAYROLL_REPORT_SYNC_MAX_ROWS=0)
+def test_large_report_is_queued_as_background_artifact(
+    api_client, company, hr, cycle, payroll_line
+):
+    cycle.status = PayrollCycle.Status.REVIEW
+    cycle.save(update_fields=["status", "updated_at"])
+    authenticate(api_client, hr, company, Membership.Role.HR)
+
+    with patch("apps.payroll.views.generate_payroll_report.delay") as delay_mock:
+        response = api_client.get(f"/api/v1/payroll-cycles/{cycle.id}/report-pdf/")
+
+    assert response.status_code == 202
+    assert response.data["export_type"] == "report_pdf"
+    assert response.data["status"] == "pending"
+    delay_mock.assert_called_once()

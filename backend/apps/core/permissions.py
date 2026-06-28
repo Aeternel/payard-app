@@ -31,6 +31,14 @@ class RoleAtLeast(BasePermission):
         )
 
 
+class RoleIn(BasePermission):
+    allowed_roles = frozenset()
+
+    def has_permission(self, request, view):
+        membership = getattr(request, "membership", None)
+        return bool(membership and membership.role in self.allowed_roles)
+
+
 class IsCompanyAdmin(RoleAtLeast):
     minimum_role = "admin"
 
@@ -43,57 +51,41 @@ class IsFinanceApprover(RoleAtLeast):
     minimum_role = "finance"
 
 
-class CanViewPayroll(BasePermission):
+class CanViewPayroll(RoleIn):
     allowed_roles = {"hr", "payroll", "finance", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
 
-
-class IsPayrollManager(BasePermission):
+class IsPayrollManager(RoleIn):
     allowed_roles = {"hr", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
 
-
-class CanBuildPayroll(BasePermission):
+class CanBuildPayroll(RoleIn):
     allowed_roles = {"hr", "payroll", "finance", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
 
-
-class IsWorkforceManager(BasePermission):
+class IsWorkforceManager(RoleIn):
     allowed_roles = {"hr", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
 
-
-class CanCreateDisputes(BasePermission):
+class CanCreateDisputes(RoleIn):
     allowed_roles = {"supervisor", "operations", "hr", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
 
-
-class IsDisputeResolver(BasePermission):
+class IsDisputeResolver(RoleIn):
     allowed_roles = {"hr", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
 
-
-class IsAdvanceDisburser(BasePermission):
+class IsAdvanceDisburser(RoleIn):
     allowed_roles = {"finance", "admin", "owner"}
 
-    def has_permission(self, request, view):
-        membership = getattr(request, "membership", None)
-        return bool(membership and membership.role in self.allowed_roles)
+
+class CanManageAttendance(RoleIn):
+    allowed_roles = {"supervisor", "operations", "hr", "payroll", "admin", "owner"}
+
+
+class CanManageSiteOperations(RoleIn):
+    allowed_roles = {"operations", "hr", "admin", "owner"}
+
+
+class CanResolveCompliance(RoleIn):
+    allowed_roles = {"operations", "hr", "admin", "owner"}

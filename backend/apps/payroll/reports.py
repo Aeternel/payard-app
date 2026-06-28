@@ -182,7 +182,7 @@ def build_html_report(report):
     <span>Currency: {escape(report.cycle.company.currency)}</span></div>
 </main>
 </body>
-</html>"""
+</html>""", _filename(report, "html")
 
 
 def build_pdf_report(report):
@@ -475,3 +475,21 @@ def build_excel_report(report):
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue(), _filename(report, "xlsx")
+
+
+def build_report_artifact(report, report_format):
+    if report_format == "html":
+        content, filename = build_html_report(report)
+        return content.encode(), filename, "text/html; charset=utf-8", "inline"
+    if report_format == "pdf":
+        content, filename = build_pdf_report(report)
+        return content, filename, "application/pdf", "attachment"
+    if report_format == "excel":
+        content, filename = build_excel_report(report)
+        return (
+            content,
+            filename,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "attachment",
+        )
+    raise ValueError(f"Unsupported payroll report format: {report_format}")
