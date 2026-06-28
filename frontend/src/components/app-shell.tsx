@@ -73,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const navItems = me
     ? navigation.filter((item) => !item.visible || item.visible(me.role))
-    : navigation;
+    : navigation.filter((item) => !item.visible);
   const quickLink = me
     ? canAccessAttendance(me.role)
       ? { href: "/app/attendance", label: "Today's roster", Icon: CalendarDays }
