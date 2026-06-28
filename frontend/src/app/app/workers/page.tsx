@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Badge, ErrorState, LoadingState } from "@/components/page-state";
 import { apiFetch, fetchAll } from "@/lib/api";
+import { canManageWorkers } from "@/lib/access";
 import type { Me, Worker } from "@/lib/types";
-
-const managerRoles = new Set(["hr", "admin", "owner"]);
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[] | null>(null);
@@ -53,7 +52,7 @@ export default function WorkersPage() {
           <h1>Workers</h1>
           <p>Employment, wage setup, documents, and payroll readiness.</p>
         </div>
-        {managerRoles.has(me.role) && (
+        {canManageWorkers(me.role) && (
           <Link className="button" href="/app/workers/new">
             <Plus size={17} /> Add worker
           </Link>

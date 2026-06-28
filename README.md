@@ -173,6 +173,11 @@ Payroll report generation supports two modes:
   Celery. Clients should poll `/api/v1/payroll-exports/` and use the returned
   `download_url` once the artifact reaches `ready`.
 
+The Next.js staff UI is role-aware and now mirrors backend access boundaries:
+attendance links are hidden from finance-only users, payroll links are hidden
+from supervisor-only users, and large payroll report buttons switch from direct
+download to queued-export status handling without exposing raw JSON responses.
+
 ## Production Checklist
 
 1. Obtain UAE legal review for WPS formatting, wage rules, retention, consent,
