@@ -228,6 +228,9 @@ export default function PayrollPage() {
   const canOperate = Boolean(me && operatorRoles.has(me.role));
   const canApprove = Boolean(me && canApprovePayroll(me.role));
   const lineEditable = Boolean(selected && ["draft", "review"].includes(selected.status));
+  const latestExports = reportFormats
+    .map((format) => ({ format, item: exportsByType[`report_${format}`] ?? null }))
+    .filter(({ item }) => item);
 
   const loadCycles = useCallback(async () => {
     const items = await fetchAll<Cycle>("payroll-cycles/?page_size=100");
