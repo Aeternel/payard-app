@@ -10,8 +10,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.models import Membership, User
 from apps.attendance.models import AttendanceRecord
 from apps.core.models import AuditLog
+from apps.organizations.models import Company
 from apps.payroll.models import DailyWageLedger, PayrollCycle, PayrollLine
 from apps.sites.models import RosterAssignment
+from apps.workforce.models import Worker
 
 
 def authenticate(client, user, company, role):
@@ -130,6 +132,53 @@ def test_hr_can_build_draft_payroll_cycle(api_client, company, hr, cycle, worker
     cycle.refresh_from_db()
     assert cycle.status == PayrollCycle.Status.REVIEW
     assert cycle.lines.filter(worker=worker).exists()
+
+
+@pytest.mark.django_db
+def test_payroll_adjustment_rejects_cross_company_worker_and_cycle(
+    api_client, company, owner
+):
+    other_company = Company.objects.create(
+        name="Other Facilities",
+        slug="other-facilities-adjustments",
+        legal_name="Other Facilities LLC",
+    )
+    other_worker = Worker.objects.create(
+        company=other_company,
+        worker_code="OTHER-1",
+        full_name="Other Worker",
+        employment_start_date=date(2026, 6, 1),
+        status=Worker.Status.ACTIVE,
+        wage_type=Worker.WageType.DAILY,
+        basic_wage=Decimal("100.00"),
+        payroll_method="card",
+        bank_account_or_card="other-card",
+    )
+    other_cycle = PayrollCycle.objects.create(
+        company=other_company,
+        name="Other June 2026",
+        period_start=date(2026, 6, 1),
+        period_end=date(2026, 6, 30),
+    )
+    authenticate(api_client, owner, company, Membership.Role.OWNER)
+
+    response = api_client.post(
+        "/api/v1/payroll-adjustments/",
+        {
+            "cycle": str(other_cycle.id),
+            "worker": str(other_worker.id),
+            "source_type": "manual",
+            "amount": "25.00",
+            "reason": "Cross-company attempt",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["error"]["detail"] == {
+        "cycle": ["Cross-company reference denied."],
+        "worker": ["Cross-company reference denied."],
+    }
 
 
 @pytest.mark.django_db

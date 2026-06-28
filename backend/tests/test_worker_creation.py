@@ -129,3 +129,40 @@ def test_hr_creation_options_only_include_company_resources(
             "site_ids": [str(site.id)],
         }
     ]
+
+
+@pytest.mark.django_db
+def test_worker_transfer_rejects_source_assignment_for_different_worker(
+    api_client, company, hr, supervisor, site, shift, roster
+):
+    other_worker = Worker.objects.create(
+        company=company,
+        worker_code="W-OTHER",
+        full_name="Other Worker",
+        employment_start_date=date.today(),
+        status=Worker.Status.ACTIVE,
+        wage_type=Worker.WageType.DAILY,
+        basic_wage=Decimal("95.00"),
+        payroll_method="card",
+        bank_account_or_card="CARD-OTHER",
+        default_site=site,
+        supervisor=supervisor,
+    )
+    authenticate(api_client, hr, company, Membership.Role.HR)
+
+    response = api_client.post(
+        "/api/v1/worker-transfers/",
+        {
+            "worker": str(other_worker.id),
+            "from_assignment": str(roster.id),
+            "to_site": str(site.id),
+            "to_shift": str(shift.id),
+            "reason": "Move worker",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["error"]["detail"] == {
+        "from_assignment": ["Selected source assignment does not belong to this worker."]
+    }
