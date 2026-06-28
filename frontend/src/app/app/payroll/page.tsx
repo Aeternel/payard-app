@@ -259,6 +259,7 @@ export default function PayrollPage() {
       setExportsByType({});
       return;
     }
+    setExportsByType({});
     const items = await fetchAll<PayrollExport>(
       `payroll-exports/?cycle=${selectedId}&page_size=20`,
     );
@@ -305,6 +306,7 @@ export default function PayrollPage() {
       setExportsByType({});
       return;
     }
+    setExportsByType({});
     fetchAll<PayrollLine>(`payroll-lines/?cycle=${selectedId}&page_size=250`)
       .then(setLines)
       .catch((caught) =>
@@ -630,28 +632,27 @@ export default function PayrollPage() {
             <div className="inline-actions">
               {lines.length > 0 && (
                 <>
-                  <a
+                  <button
                     className="button secondary"
-                    href={`/api/backend/payroll-cycles/${selected.id}/report-html/`}
-                    rel="noreferrer"
-                    target="_blank"
+                    disabled={downloading === "html"}
+                    onClick={() => void runReport("html")}
                   >
-                    <Eye size={15} /> View HTML
-                  </a>
-                  <a
+                    <Eye size={15} /> {downloading === "html" ? "Preparing..." : "View HTML"}
+                  </button>
+                  <button
                     className="button secondary"
-                    download
-                    href={`/api/backend/payroll-cycles/${selected.id}/report-pdf/`}
+                    disabled={downloading === "pdf"}
+                    onClick={() => void runReport("pdf")}
                   >
-                    <FileText size={15} /> PDF
-                  </a>
-                  <a
+                    <FileText size={15} /> {downloading === "pdf" ? "Preparing..." : "PDF"}
+                  </button>
+                  <button
                     className="button secondary"
-                    download
-                    href={`/api/backend/payroll-cycles/${selected.id}/report-excel/`}
+                    disabled={downloading === "excel"}
+                    onClick={() => void runReport("excel")}
                   >
-                    <FileSpreadsheet size={15} /> Excel
-                  </a>
+                    <FileSpreadsheet size={15} /> {downloading === "excel" ? "Preparing..." : "Excel"}
+                  </button>
                 </>
               )}
               {canManage && selected.status === "draft" && (
@@ -664,6 +665,43 @@ export default function PayrollPage() {
               )}
             </div>
           </div>
+
+          {latestExports.length > 0 && (
+            <div className="card">
+              <strong>Background report artifacts</strong>
+              <p className="muted" style={{ marginTop: ".35rem" }}>
+                Large payroll reports are generated in the background once a cycle exceeds
+                the synchronous export limit.
+              </p>
+              <div className="inline-actions" style={{ marginTop: ".9rem", flexWrap: "wrap" }}>
+                {latestExports.map(({ format, item }) => (
+                  item && (
+                    <span
+                      className="inline-actions"
+                      key={item.id}
+                      style={{ alignItems: "center", gap: ".5rem" }}
+                    >
+                      <Badge value={item.status} />
+                      <span className="muted">{reportLabel(format)} v{item.version}</span>
+                      {item.status === "ready" && item.download_url && (
+                        <a
+                          className="button secondary"
+                          href={item.download_url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Download
+                        </a>
+                      )}
+                      {item.status === "failed" && item.error && (
+                        <span className="error">{item.error}</span>
+                      )}
+                    </span>
+                  )
+                ))}
+              </div>
+            </div>
+          )}
 
           {editingCycle && (
             <form className="card cycle-form" onSubmit={(event) => saveCycle(event, selected)}>
