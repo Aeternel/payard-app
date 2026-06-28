@@ -1,42 +1,68 @@
 "use client";
 
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge, ErrorState, LoadingState } from "@/components/page-state";
-import { fetchAll } from "@/lib/api";
-import type { Attendance, Worker } from "@/lib/types";
+import { apiFetch, fetchAll } from "@/lib/api";
+import { canAccessAttendance, canViewPayroll } from "@/lib/access";
+import type { Attendance, Me, Worker } from "@/lib/types";
 
 type Alert = { id: string; title: string; severity: string; status: string; description: string };
 type Dispute = { id: string; worker_name: string; dispute_type: string; status: string; sla_due_at: string };
 
 export default function OverviewPage() {
-  const [data, setData] = useState<{ workers: Worker[]; attendance: Attendance[]; alerts: Alert[]; disputes: Dispute[] } | null>(null);
+  const [data, setData] = useState<{
+    me: Me;
+    workers: Worker[];
+    attendance: Attendance[];
+    alerts: Alert[];
+    disputes: Dispute[];
+  } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      fetchAll<Worker>("workers/?status=active&page_size=200"),
-      fetchAll<Attendance>(`attendance/?work_date=${new Date().toISOString().slice(0, 10)}&page_size=200`),
-      fetchAll<Alert>("compliance-alerts/?status=open&page_size=10"),
-      fetchAll<Dispute>("disputes/?page_size=10"),
-    ]).then(([workers, attendance, alerts, disputes]) => setData({ workers, attendance, alerts, disputes })).catch((e) => setError(e.message));
+    queueMicrotask(async () => {
+      try {
+        const me = await apiFetch<Me>("auth/me/");
+        const [workers, attendance, alerts, disputes] = await Promise.all([
+          fetchAll<Worker>("workers/?status=active&page_size=200"),
+          canAccessAttendance(me.role)
+            ? fetchAll<Attendance>(
+                `attendance/?work_date=${new Date().toISOString().slice(0, 10)}&page_size=200`,
+              )
+            : Promise.resolve([]),
+          fetchAll<Alert>("compliance-alerts/?status=open&page_size=10"),
+          fetchAll<Dispute>("disputes/?page_size=10"),
+        ]);
+        setData({ me, workers, attendance, alerts, disputes });
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Unable to load overview.");
+      }
+    });
   }, []);
 
   if (error) return <ErrorState message={error} />;
   if (!data) return <LoadingState />;
   const present = new Set(data.attendance.map((item) => item.worker)).size;
   const exceptions = data.attendance.filter((item) => item.flags.length).length;
+  const attendanceVisible = canAccessAttendance(data.me.role);
+  const payrollVisible = canViewPayroll(data.me.role);
 
   return (
     <>
       <header className="page-head">
         <div><p className="eyebrow">Live control room</p><h1>Today at a glance</h1><p>Attendance, payroll risk, and worker issues in one operational view.</p></div>
-        <button className="button">Review payroll readiness <ArrowUpRight size={17} /></button>
+        {payrollVisible && (
+          <Link className="button" href="/app/payroll">
+            Review payroll readiness <ArrowUpRight size={17} />
+          </Link>
+        )}
       </header>
       <section className="grid stats">
         <article className="card stat"><div className="label">Active workers</div><div className="value">{data.workers.length}</div><div className="hint">Across accessible sites</div></article>
-        <article className="card stat"><div className="label">Present today</div><div className="value">{present}</div><div className="hint">{data.workers.length ? Math.round(present / data.workers.length * 100) : 0}% attendance captured</div></article>
-        <article className="card stat"><div className="label">Exceptions</div><div className="value">{exceptions}</div><div className="hint">Need review before approval</div></article>
+        <article className="card stat"><div className="label">Present today</div><div className="value">{attendanceVisible ? present : "Restricted"}</div><div className="hint">{attendanceVisible ? `${data.workers.length ? Math.round(present / data.workers.length * 100) : 0}% attendance captured` : "Attendance tools are hidden for your role."}</div></article>
+        <article className="card stat"><div className="label">Exceptions</div><div className="value">{attendanceVisible ? exceptions : "Restricted"}</div><div className="hint">{attendanceVisible ? "Need review before approval" : "Exception review follows attendance access."}</div></article>
         <article className="card stat"><div className="label">Compliance alerts</div><div className="value">{data.alerts.length}</div><div className="hint">Open items in your scope</div></article>
       </section>
       <section className="grid two-col">
@@ -60,4 +86,3 @@ export default function OverviewPage() {
     </>
   );
 }
-
