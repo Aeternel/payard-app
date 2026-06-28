@@ -21,7 +21,7 @@ from apps.attendance.views import (
     OvertimeRequestViewSet,
 )
 from apps.compliance.views import ComplianceAlertViewSet
-from apps.core.views import AuditLogViewSet, HealthView
+from apps.core.views import AuditLogViewSet, DocsView, HealthView, ReadinessView, SchemaView
 from apps.disputes.views import (
     DisputeCommentViewSet,
     DisputeEvidenceViewSet,
@@ -110,10 +110,26 @@ router.register("notification-outbox", NotificationOutboxViewSet, basename="noti
 router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("health/", HealthView.as_view(), name="health"),
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("ready/", ReadinessView.as_view(), name="ready"),
+    path(
+        "api/schema/",
+        type(
+            "ConfiguredSchemaView",
+            (SchemaView,),
+            {"spectacular_view_class": SpectacularAPIView},
+        ).as_view(),
+        name="schema",
+    ),
+    path(
+        "api/docs/",
+        type(
+            "ConfiguredDocsView",
+            (DocsView,),
+            {"swagger_view_class": SpectacularSwaggerView},
+        ).as_view(),
+        name="swagger-ui",
+    ),
     path("api/v1/auth/login/", LoginView.as_view(), name="login"),
     path("api/v1/auth/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("api/v1/auth/me/", MeView.as_view(), name="me"),
@@ -130,6 +146,9 @@ urlpatterns = [
     path("api/v1/webhooks/whatsapp/", WhatsAppWebhookView.as_view()),
     path("api/v1/", include(router.urls)),
 ]
+
+if settings.ENABLE_ADMIN:
+    urlpatterns.insert(0, path("admin/", admin.site.urls))
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

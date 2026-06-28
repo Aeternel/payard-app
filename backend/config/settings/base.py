@@ -15,7 +15,12 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("SECRET_KEY", default="unsafe-development-key-change-me")
 ENVIRONMENT = env("ENVIRONMENT", default="development")
 DEBUG = env.bool("DEBUG", default=False)
+APP_VERSION = env("APP_VERSION", default="dev")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+ENABLE_ADMIN = env.bool("ENABLE_ADMIN", default=ENVIRONMENT == "development")
+ENABLE_API_DOCS = env.bool(
+    "ENABLE_API_DOCS", default=DEBUG or ENVIRONMENT == "development"
+)
 
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -207,21 +212,38 @@ if AWS_STORAGE_BUCKET_NAME:
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
 X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {
-        "json": {
-            "format": (
-                '{"time":"%(asctime)s","level":"%(levelname)s",'
-                '"logger":"%(name)s","message":"%(message)s"}'
-            ),
+    "filters": {
+        "request_context": {
+            "()": "apps.core.logging.RequestContextFilter",
         }
     },
-    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "json"}},
+    "formatters": {
+        "json": {
+            "()": "apps.core.logging.JSONFormatter",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["request_context"],
+            "formatter": "json",
+        }
+    },
+    "loggers": {
+        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "django.request": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "payyard.request": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
     "root": {"handlers": ["console"], "level": "INFO"},
 }

@@ -74,6 +74,7 @@ ignored by Git. Replace every secret before using a shared environment.
 - API: `http://localhost:8001/api/v1/`
 - OpenAPI: `http://localhost:8001/api/docs/`
 - Health: `http://localhost:8001/health/`
+- Readiness: `http://localhost:8001/ready/`
 
 Seeded staff credentials:
 
@@ -137,6 +138,14 @@ Firebase, WhatsApp, SMS, storage, and the public worker-portal URL. Frontend
 configuration contains the server-only Django API URL; do not prefix it with
 `NEXT_PUBLIC_` because authentication traffic must remain in Next.js route
 handlers.
+
+Operational flags:
+
+- `APP_VERSION` surfaces the release version in health and readiness responses.
+- `ENABLE_API_DOCS` should be `false` in staging and production unless you
+  intentionally expose OpenAPI docs.
+- `ENABLE_ADMIN` should be `false` in staging and production unless you
+  intentionally rely on Django admin.
 
 For separate production hosting:
 
