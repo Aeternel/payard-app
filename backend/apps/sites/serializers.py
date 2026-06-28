@@ -80,3 +80,16 @@ class WorkerTransferSerializer(CompanyReferenceValidationMixin, serializers.Mode
             "created_at",
             "updated_at",
         ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        worker = attrs.get("worker", getattr(self.instance, "worker", None))
+        from_assignment = attrs.get(
+            "from_assignment",
+            getattr(self.instance, "from_assignment", None),
+        )
+        if worker and from_assignment and from_assignment.worker_id != worker.id:
+            raise serializers.ValidationError(
+                {"from_assignment": "Selected source assignment does not belong to this worker."}
+            )
+        return attrs

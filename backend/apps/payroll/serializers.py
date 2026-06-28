@@ -111,6 +111,21 @@ class PayrollAdjustmentSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def validate(self, attrs):
+        company = self.context["request"].company
+        errors = {}
+        for field in ("cycle", "worker"):
+            obj = attrs.get(field)
+            if obj and obj.company_id != company.id:
+                errors[field] = "Cross-company reference denied."
+        cycle = attrs.get("cycle", getattr(self.instance, "cycle", None))
+        worker = attrs.get("worker", getattr(self.instance, "worker", None))
+        if cycle and worker and cycle.company_id != worker.company_id:
+            errors["worker"] = "Worker and payroll cycle must belong to the same company."
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
 
 class PayrollExportSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()

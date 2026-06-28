@@ -232,7 +232,9 @@ def create_worker_otp(*, company, phone, request_ip=None):
         created_at__gte=timezone.now() - timedelta(minutes=10),
     ).count()
     if recent >= 3:
-        raise ValidationError("Too many OTP requests. Try again later.")
+        # Keep the public API response uniform so repeated requests cannot
+        # confirm whether a worker account exists for a phone number.
+        return None, None, None
     code = f"{secrets.randbelow(1_000_000):06d}"
     challenge = WorkerOTPChallenge.objects.create(
         company=company,
